@@ -87,8 +87,16 @@ const int num_buttons = 8;
 byte pins[num_buttons] = {A0, A1, A2, A3, A7, A9, A10, A11};
 byte previous_state[num_buttons] = {unpressed, unpressed, unpressed, unpressed, unpressed, unpressed, unpressed, unpressed};
 byte current_state[num_buttons] = {unpressed, unpressed, unpressed, unpressed, unpressed, unpressed, unpressed, unpressed};
-char payloads[num_buttons] = {'U', 'D', 'L', 'R', 'E', 'T', 'A', 'B'};
-const char at_command[] = "AT+BleKeyboard=";
+const char * payloads[num_buttons] = {
+  "AT+BleKeyboard=R",
+  "AT+BleKeyboard=L",
+  "AT+BleKeyboard=D",
+  "AT+BleKeyboard=U",
+  "AT+BleKeyboard=A",
+  "AT+BleKeyboard=B",
+  "AT+BleKeyboard=E", // Select
+  "AT+BleKeyboard=T"  // Start
+};
 
 // A small helper
 void error(const __FlashStringHelper*err) {
@@ -164,7 +172,7 @@ void setup(void)
     error(F("Couldn't reset??"));
   }
 
-  // Initialize Button pins.
+  /* Initialize Button pins and set payloads. */
   for(int i = 0; i < 8; i++){
     pinMode(pins[i], INPUT_PULLUP);
   }
@@ -177,23 +185,17 @@ void setup(void)
 /**************************************************************************/
 void loop(void)
 {
-  // Read state of all button pins.
+  /* Read state of all button pins. */
   for(int i = 0; i < num_buttons; i++){
     previous_state[i] = current_state[i];
     current_state[i] = digitalRead(pins[i]);
     if(previous_state[i] == pressed && current_state[i] == unpressed){
-      Serial.print(at_command);
-      Serial.println(payloads[i]);
-      ble.print(at_command);
-      ble.println(payloads[i]);
-          
-      if( ble.waitForOK() )
-      {
-        Serial.println( F("OK!") );
-      }
-      else
-      {
-        Serial.println( F("FAILED!") );
+      if(ble.println(payloads[i])){
+        Serial.print(F("Sent "));
+        Serial.println(payloads[i]);
+      } else {
+        Serial.print(F("Could not send "));
+        Serial.println(payloads[i]);
       }
     }
   }
