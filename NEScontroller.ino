@@ -62,40 +62,23 @@
 /*=========================================================================*/
 
 
-// Create the bluefruit object, either software serial...uncomment these lines
-/*
-SoftwareSerial bluefruitSS = SoftwareSerial(BLUEFRUIT_SWUART_TXD_PIN, BLUEFRUIT_SWUART_RXD_PIN);
-
-Adafruit_BluefruitLE_UART ble(bluefruitSS, BLUEFRUIT_UART_MODE_PIN,
-                      BLUEFRUIT_UART_CTS_PIN, BLUEFRUIT_UART_RTS_PIN);
-*/
-
-/* ...or hardware serial, which does not need the RTS/CTS pins. Uncomment this line */
-// Adafruit_BluefruitLE_UART ble(BLUEFRUIT_HWSERIAL_NAME, BLUEFRUIT_UART_MODE_PIN);
-
-/* ...hardware SPI, using SCK/MOSI/MISO hardware SPI pins and then user selected CS/IRQ/RST */
 Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_CS, BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
-
-/* ...software SPI, using SCK/MOSI/MISO user-defined SPI pins and then user selected CS/IRQ/RST */
-//Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_SCK, BLUEFRUIT_SPI_MISO,
-//                             BLUEFRUIT_SPI_MOSI, BLUEFRUIT_SPI_CS,
-//                             BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
 
 const int pressed = LOW;
 const int unpressed = HIGH;
 const int num_buttons = 8;
 byte pins[num_buttons] = {A0, A1, A2, A3, A7, A9, A10, A11};
-byte previous_state[num_buttons] = {unpressed, unpressed, unpressed, unpressed, unpressed, unpressed, unpressed, unpressed};
-byte current_state[num_buttons] = {unpressed, unpressed, unpressed, unpressed, unpressed, unpressed, unpressed, unpressed};
+byte previous_state[num_buttons];
+byte current_state[num_buttons];
 const char * payloads[num_buttons] = {
-  "AT+BleKeyboard=R",
-  "AT+BleKeyboard=L",
-  "AT+BleKeyboard=D",
-  "AT+BleKeyboard=U",
-  "AT+BleKeyboard=A",
-  "AT+BleKeyboard=B",
-  "AT+BleKeyboard=E", // Select
-  "AT+BleKeyboard=T"  // Start
+  "4F", // Right
+  "50", // Left
+  "51", // Down
+  "52", // Up
+  "04", // a
+  "05", // b
+  "2A", // Select (Backspace)
+  "28"  // Start (Return)
 };
 
 // A small helper
@@ -112,9 +95,7 @@ void error(const __FlashStringHelper*err) {
 /**************************************************************************/
 void setup(void)
 {
-
-
-  while (!Serial);  // required for Flora & Micro
+  while(!Serial);  // required for Flora & Micro
   delay(500);
 
   Serial.begin(115200);
@@ -124,17 +105,15 @@ void setup(void)
   /* Initialise the module */
   Serial.print(F("Initialising the Bluefruit LE module: "));
 
-  if ( !ble.begin(VERBOSE_MODE) )
-  {
+  if(!ble.begin(VERBOSE_MODE)){
     error(F("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?"));
   }
-  Serial.println( F("OK!") );
+  Serial.println(F("OK!"));
 
-  if ( FACTORYRESET_ENABLE )
-  {
+  if(FACTORYRESET_ENABLE){
     /* Perform a factory reset to make sure everything is in a known state */
     Serial.println(F("Performing a factory reset: "));
-    if ( ! ble.factoryReset() ){
+    if(!ble.factoryReset()){
       error(F("Couldn't factory reset"));
     }
   }
@@ -148,23 +127,12 @@ void setup(void)
 
   /* Change the device name to make it easier to find */
   Serial.println(F("Setting device name to 'NES Controller': "));
-  if (! ble.sendCommandCheckOK(F( "AT+GAPDEVNAME=NES Controller" )) ) {
+  if(!ble.sendCommandCheckOK(F("AT+GAPDEVNAME=NES Controller"))){
     error(F("Could not set device name?"));
   }
 
   /* Enable HID Service */
-  Serial.println(F("Enable HID Service (including Keyboard): "));
-  if ( ble.isVersionAtLeast(MINIMUM_FIRMWARE_VERSION) )
-  {
-    if ( !ble.sendCommandCheckOK(F( "AT+BleHIDEn=On" ))) {
-      error(F("Could not enable Keyboard"));
-    }
-  }else
-  {
-    if (! ble.sendCommandCheckOK(F( "AT+BleKeyboardEn=On"  ))) {
-      error(F("Could not enable Keyboard"));
-    }
-  }
+  ble.sendCommandCheckOK(F( "AT+BleHIDEn=On"  ));
 
   /* Add or remove service requires a reset */
   Serial.println(F("Performing a SW reset (service changes require a reset): "));
@@ -172,31 +140,51 @@ void setup(void)
     error(F("Couldn't reset??"));
   }
 
-  /* Initialize Button pins and set payloads. */
+  /* Initialize Button pins and state. */
   for(int i = 0; i < 8; i++){
     pinMode(pins[i], INPUT_PULLUP);
+    previous_state[i] = unpressed;
+    current_state[i] = unpressed;
   }
 }
 
 /**************************************************************************/
 /*!
-    @brief  Constantly poll for new command or response data
+    @brief  Poll for button presses and send key codes.
 */
 /**************************************************************************/
 void loop(void)
 {
+  char * keyboardcode[] = {"00", "00", "00", "00", "00", "00"};
+  // Index into keyboardcode.
+  int j = 0;
+  // Should we transmit?
+  int transmit = 0;
   /* Read state of all button pins. */
   for(int i = 0; i < num_buttons; i++){
     previous_state[i] = current_state[i];
     current_state[i] = digitalRead(pins[i]);
-    if(previous_state[i] == pressed && current_state[i] == unpressed){
-      if(ble.println(payloads[i])){
-        Serial.print(F("Sent "));
-        Serial.println(payloads[i]);
-      } else {
-        Serial.print(F("Could not send "));
-        Serial.println(payloads[i]);
+    if(current_state[i] == pressed){
+      // Add key code to array, if key down we need to transmit.
+      keyboardcode[j++] = payloads[i];
+      if(j > 5){
+        j = 0;
       }
+      if(previous_state[i] == unpressed){
+        transmit = 1;
+      }
+    } else if(previous_state[i] == pressed && current_state[i] == unpressed){
+      // Must transmit on key up, even if all 0s.
+      transmit = 1;
     }
+  }
+
+  if(transmit){
+    ble.print(F("AT+BLEKEYBOARDCODE=00-00-"));
+    for(int i = 0; i < 5; i++){
+      ble.print(keyboardcode[i]);
+      ble.print(F("-"));
+    }
+    ble.println(keyboardcode[5]);
   }
 }
