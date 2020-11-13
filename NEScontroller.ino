@@ -95,20 +95,20 @@ void error(const __FlashStringHelper*err) {
 /**************************************************************************/
 void setup(void)
 {
-  while(!Serial);  // required for Flora & Micro
-  delay(500);
+  //while(!Serial);  // required for Flora & Micro
+  //delay(500);
 
-  Serial.begin(115200);
-  Serial.println(F("Adafruit Bluefruit HID Keyboard Example"));
-  Serial.println(F("---------------------------------------"));
+  //Serial.begin(115200);
+  //Serial.println(F("Adafruit Bluefruit HID Keyboard Example"));
+  //Serial.println(F("---------------------------------------"));
 
   /* Initialise the module */
-  Serial.print(F("Initialising the Bluefruit LE module: "));
+  //Serial.print(F("Initialising the Bluefruit LE module: "));
 
   if(!ble.begin(VERBOSE_MODE)){
     error(F("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?"));
   }
-  Serial.println(F("OK!"));
+  //Serial.println(F("OK!"));
 
   if(FACTORYRESET_ENABLE){
     /* Perform a factory reset to make sure everything is in a known state */
@@ -121,12 +121,12 @@ void setup(void)
   /* Disable command echo from Bluefruit */
   ble.echo(false);
 
-  Serial.println("Requesting Bluefruit info:");
+  //Serial.println("Requesting Bluefruit info:");
   /* Print Bluefruit information */
   ble.info();
 
   /* Change the device name to make it easier to find */
-  Serial.println(F("Setting device name to 'NES Controller': "));
+  //Serial.println(F("Setting device name to 'NES Controller': "));
   if(!ble.sendCommandCheckOK(F("AT+GAPDEVNAME=NES Controller"))){
     error(F("Could not set device name?"));
   }
@@ -135,7 +135,7 @@ void setup(void)
   ble.sendCommandCheckOK(F( "AT+BleHIDEn=On"  ));
 
   /* Add or remove service requires a reset */
-  Serial.println(F("Performing a SW reset (service changes require a reset): "));
+  //Serial.println(F("Performing a SW reset (service changes require a reset): "));
   if (! ble.reset() ) {
     error(F("Couldn't reset??"));
   }
